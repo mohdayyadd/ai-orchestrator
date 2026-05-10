@@ -11,6 +11,10 @@ from sqlalchemy.orm import Session
 
 from agent_orchestrator.db import models
 from agent_orchestrator.settings import Settings
+from agent_orchestrator.services.worktree_manager import (
+    WorktreeManager,
+    assert_real_worker_uses_isolated_worktree,
+)
 from agent_orchestrator.workers.base import WorkerInvocation
 from agent_orchestrator.workers.registry import get_worker
 
@@ -328,8 +332,17 @@ def dispatch_run(
     run_dir = Path(run.artifact_root)
     repo = Path(run.repo_path)
 
-    # V1: use repo_path as working directory (worktree creation can be added later)
-    worktree_path = repo
+    dispatch_cwd = WorktreeManager.ensure_dispatch_cwd(session, run, settings)
+
+    if agent != "mock":
+        if not dispatch_cwd.isolated:
+            raise RuntimeError(
+                "Real workers (claude/codex/cursor) require a git repository at repo_path "
+                "so an isolated worktree can be created under WORKTREES_DIR."
+            )
+        assert_real_worker_uses_isolated_worktree(run.repo_path, dispatch_cwd.path)
+
+    worktree_path = dispatch_cwd.path
 
     prompt = (
         (run_dir / "plan.md").read_text(encoding="utf-8", errors="replace")
@@ -361,8 +374,11 @@ def dispatch_run(
 
     out_path = run_dir / "worker_output.md"
     if result.stdout_path and Path(result.stdout_path).is_file():
-        shutil.copy2(result.stdout_path, out_path)
-    else:
+        src_p = Path(result.stdout_path).resolve()
+        dst_p = out_path.resolve()
+        if src_p != dst_p:
+            shutil.copy2(result.stdout_path, out_path)
+    if not out_path.is_file():
         out_path.write_text("(no stdout captured)\n", encoding="utf-8")
     write_artifact_record(session, run.id, "worker_output", "worker_output.md")
 
@@ -396,7 +412,13 @@ def dispatch_run(
             run_id=run.id,
             step_type="dispatch",
             status="completed" if result.exit_code == 0 else "failed",
-            payload_json={"agent": agent, "exit_code": result.exit_code},
+            payload_json={
+                "agent": agent,
+                "exit_code": result.exit_code,
+                "repo_path": str(repo.resolve()),
+                "worktree_path": str(worktree_path.resolve()),
+                "worktree_branch": dispatch_cwd.branch_name,
+            },
             error=None if result.exit_code == 0 else f"exit {result.exit_code}",
             started_at=t_start,
             finished_at=t_end,

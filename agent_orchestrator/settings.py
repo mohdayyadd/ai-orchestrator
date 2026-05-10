@@ -25,6 +25,7 @@ class Settings(BaseSettings):
 
     workspace_root: Path = Field(default=Path("/workspace"), alias="WORKSPACE_ROOT")
     artifacts_dir: Path = Field(default=Path(".agent_runs"), alias="ARTIFACTS_DIR")
+    worktrees_dir: Path = Field(default=Path(".agent_worktrees"), alias="WORKTREES_DIR")
     tasks_dir: Path = Field(default=Path("workspace/tasks"), alias="TASKS_DIR")
 
     running_in_docker: bool = Field(default=False, alias="RUNNING_IN_DOCKER")

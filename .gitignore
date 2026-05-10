@@ -6,6 +6,7 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 .agent_runs/
+.agent_worktrees/
 *.egg-info/
 dist/
 build/

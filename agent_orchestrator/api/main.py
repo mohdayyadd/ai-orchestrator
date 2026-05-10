@@ -12,6 +12,7 @@ from agent_orchestrator.db import models
 from agent_orchestrator.db.session import get_session_factory
 from agent_orchestrator.services import run_ops
 from agent_orchestrator.services.run_ops import utc_now
+from agent_orchestrator.services.worktree_manager import get_active_repo_worktree
 from agent_orchestrator.settings import get_settings
 
 app = FastAPI(title="Agent Orchestrator", version="0.1.0")
@@ -69,6 +70,7 @@ def api_get_run(run_id: str, db: Session = Depends(get_db)) -> dict[str, str]:
     r = db.execute(select(models.Run).where(models.Run.id == rid)).scalar_one_or_none()
     if not r:
         raise HTTPException(404, "run not found")
+    wt = get_active_repo_worktree(db, rid)
     return {
         "id": str(r.id),
         "status": r.status,
@@ -76,6 +78,8 @@ def api_get_run(run_id: str, db: Session = Depends(get_db)) -> dict[str, str]:
         "selected_worker": r.selected_worker or "",
         "artifact_root": r.artifact_root,
         "repo_path": r.repo_path,
+        "worktree_path": wt.worktree_path if wt else "",
+        "worktree_branch": wt.branch_name if wt else "",
     }
 
 

@@ -11,6 +11,7 @@ from rich.table import Table
 
 from agent_orchestrator.db.session import session_scope
 from agent_orchestrator.services import run_ops
+from agent_orchestrator.services.worktree_manager import WorktreeManager, get_active_repo_worktree
 from agent_orchestrator.settings import get_settings
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
@@ -26,6 +27,7 @@ def init() -> None:
     """Create local directories and config scaffolding (no DB required)."""
     s = get_settings()
     s.artifacts_dir.mkdir(parents=True, exist_ok=True)
+    s.worktrees_dir.mkdir(parents=True, exist_ok=True)
     s.tasks_dir.mkdir(parents=True, exist_ok=True)
     Path("workspace/repos").mkdir(parents=True, exist_ok=True)
     Path("workspace/ecc").mkdir(parents=True, exist_ok=True)
@@ -80,6 +82,11 @@ def doctor() -> None:
         "artifacts_dir",
         "ok" if s.artifacts_dir.exists() else "warn",
         str(s.artifacts_dir),
+    )
+    table.add_row(
+        "worktrees_dir",
+        "ok" if s.worktrees_dir.exists() else "warn",
+        str(s.worktrees_dir),
     )
     table.add_row("workspace_root", "ok", str(s.workspace_root))
     ok_git, hint_git = _check_cmd(["git", "--version"])
@@ -165,14 +172,31 @@ def status(run_id: str) -> None:
         run = run_ops.load_run(session, rid)
         if not run:
             raise typer.BadParameter("run not found")
+        wt = get_active_repo_worktree(session, rid)
+        wt_line = (
+            f"  worktree: {wt.worktree_path}\n  branch:   {wt.branch_name}\n"
+            if wt
+            else "  worktree: (none active)\n  branch:   -\n"
+        )
         console.print(
             f"run {run.id}\n"
             f"  status: {run.status}\n"
             f"  phase: {run.phase}\n"
             f"  worker: {run.selected_worker}\n"
             f"  artifacts: {run.artifact_root}\n"
-            f"  repo: {run.repo_path}\n"
+            f"  repo (original): {run.repo_path}\n"
+            + wt_line
         )
+
+
+@app.command("cleanup-worktree")
+def cleanup_worktree(run_id: str) -> None:
+    """Remove the git worktree for a run (git worktree remove --force) and mark DB row pruned."""
+    rid = uuid.UUID(run_id)
+    s = get_settings()
+    with session_scope() as session:
+        msg = WorktreeManager.cleanup(session, rid, s)
+        console.print(msg)
 
 
 @app.command("list-runs")

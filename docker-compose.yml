@@ -40,6 +40,7 @@ services:
     volumes:
       - .:/app
       - ./.agent_runs:/workspace/.agent_runs
+      - ./.agent_worktrees:/workspace/.agent_worktrees
       - ./workspace/repos:/workspace/repos
       - ./workspace/tasks:/workspace/tasks
       - ./workspace/ecc:/workspace/ecc
