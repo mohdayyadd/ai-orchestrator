@@ -1,0 +1,1 @@
+"""Optional Obsidian vault integration."""
